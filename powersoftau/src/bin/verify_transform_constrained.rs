@@ -8,8 +8,9 @@ use powersoftau::{
 use bellman_ce::pairing::bn256::Bn256;
 use memmap::*;
 use std::fs::OpenOptions;
-
 use std::io::{Read, Write};
+use std::io::BufWriter;
+use std::fs::File;
 
 const PREVIOUS_CHALLENGE_IS_COMPRESSED: UseCompression = UseCompression::No;
 const CONTRIBUTION_IS_COMPRESSED: UseCompression = UseCompression::Yes;
@@ -95,7 +96,6 @@ fn main() {
     println!("Calculating previous challenge hash...");
 
     // Check that contribution is correct
-
     let current_accumulator_hash = calculate_hash(&challenge_readable_map);
 
     println!("Hash of the `challenge` file for verification:");
@@ -160,7 +160,6 @@ fn main() {
     .expect("wasn't able to deserialize the response file's public key");
 
     // check that it follows the protocol
-
     println!(
         "Verifying a contribution to contain proper powers and correspond to the public key..."
     );
@@ -192,63 +191,33 @@ fn main() {
         println!("Verification succeeded! Writing to new challenge file...");
 
         // Create new challenge file in this directory
-        let writer = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(new_challenge_filename)
-            .expect("unable to create new challenge file in this directory");
+        let mut file = BufWriter::new(File::create(new_challenge_filename).expect("unable to create challenge file"));
 
         // Recomputation strips the public key and uses hashing to link with the previous contribution after decompression
-        writer
-            .set_len(parameters.accumulator_size as u64)
-            .expect("must make output file large enough");
+        let mut writable_map = vec![0; parameters.accumulator_size];
 
-        let mut writable_map = unsafe {
-            MmapOptions::new()
-                .map_mut(&writer)
-                .expect("unable to create a memory map for output")
-        };
+        (&mut writable_map[0..])
+        .write_all(response_hash.as_slice())
+        .expect("unable to write a default hash to mmap");
 
-        {
-            (&mut writable_map[0..])
-                .write_all(response_hash.as_slice())
-                .expect("unable to write a default hash to mmap");
+    writable_map
+        .flush()
+        .expect("unable to write hash to new challenge file");
 
-            writable_map
-                .flush()
-                .expect("unable to write hash to new challenge file");
+        let temp_map: *mut MmapMut = &mut writable_map as *mut _ as *mut MmapMut;
+        unsafe {
+            BatchedAccumulator::decompress(
+                &response_readable_map,
+                &mut *temp_map,
+                CheckForCorrectness::No,
+                &parameters,
+            )
+            .expect("must decompress a response for a new challenge");
         }
 
-        BatchedAccumulator::decompress(
-            &response_readable_map,
-            &mut writable_map,
-            CheckForCorrectness::No,
-            &parameters,
-        )
-        .expect("must decompress a response for a new challenge");
-
-        writable_map.flush().expect("must flush the memory map");
-
-        let new_challenge_readable_map = writable_map
-            .make_read_only()
-            .expect("must make a map readonly");
-
-        let recompressed_hash = calculate_hash(&new_challenge_readable_map);
-
-        println!("Here's the BLAKE2b hash of the decompressed participant's response as new_challenge file:");
-
-        for line in recompressed_hash.as_slice().chunks(16) {
-            print!("\t");
-            for section in line.chunks(4) {
-                for b in section {
-                    print!("{:02x}", b);
-                }
-                print!(" ");
-            }
-            println!();
-        }
-
+        file.write_all(&writable_map).expect("unable to write to response file");
+        file.flush().expect("unable to write hash to new challenge file");
+        
         println!("Done! new challenge file contains the new challenge file. The other files");
         println!("were left alone.");
     }
