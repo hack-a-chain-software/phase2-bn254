@@ -16,7 +16,8 @@ use phase2::parameters::MPCParameters;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 4 && args.len() != 6 {
+    
+    if args.len() != 3 && args.len() != 5 {
         println!("Usage: \n<in_params.params> <out_params.params> <in_str_entropy>");
         std::process::exit(exitcode::USAGE);
     }
@@ -26,7 +27,9 @@ fn main() {
     }
     let in_params_filename = &args[1];
     let out_params_filename = &args[2];
-    let entropy = &args[3];
+
+    let entropy = if args.len() > 3 { args[3].clone() } else { "".to_string() };
+
     let print_progress = args.len() == 6 && args[4] == "-v";
 
     let disallow_points_at_infinity = false;
@@ -52,7 +55,10 @@ fn main() {
             }
 
             // Hash it all up to make a seed
-            h.input(&entropy.as_bytes());
+            if entropy.len() > 0 {
+                h.input(&entropy.as_bytes());
+            }
+            
             h.result()
         };
 
