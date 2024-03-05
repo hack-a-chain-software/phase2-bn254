@@ -19,13 +19,29 @@ fn main() {
     let should_filter_points_at_infinity = false;
 
     // Import the circuit and create the initial parameters using phase 1
+    // println!("Creating initial parameters for {}...", circuit_filename);
+    // let params = {
+    //     let c = circuit_from_json_file(&circuit_filename);
+    //     MPCParameters::new(c, should_filter_points_at_infinity, radix_directory).unwrap()
+    // };
+
     println!("Creating initial parameters for {}...", circuit_filename);
-    let params = {
-        let c = circuit_from_json_file(&circuit_filename);
-        MPCParameters::new(c, should_filter_points_at_infinity, radix_directory).unwrap()
-    };
+    let c = circuit_from_json_file(&circuit_filename);
+    let params = MPCParameters::new(c, should_filter_points_at_infinity, radix_directory)
+        .expect("Failed to create MPCParameters")
+
+    // println!("Writing initial parameters to {}.", params_filename);
+    // let mut f = File::create(params_filename).unwrap();
+    // params.write(&mut f).expect("unable to write params");
 
     println!("Writing initial parameters to {}.", params_filename);
-    let mut f = File::create(params_filename).unwrap();
-    params.write(&mut f).expect("unable to write params");
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(params_filename)
+        .expect("Unable to open file");
+
+    let mut writer = BufWriter::new(file);
+    params.write(&mut writer).expect("Unable to write params");
+    writer.flush().expect("Failed to flush writer");
 }
