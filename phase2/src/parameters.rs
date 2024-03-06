@@ -4,10 +4,10 @@ extern crate byteorder;
 extern crate num_cpus;
 extern crate crossbeam;
 
-#[cfg(feature = "wasm")]
+// #[cfg(feature = "wasm")]
 use bellman_ce::singlecore::Worker;
-#[cfg(not(feature = "wasm"))]
-use bellman_ce::multicore::Worker;
+// #[cfg(not(feature = "wasm"))]
+// use bellman_ce::multicore::Worker;
 
 use byteorder::{
     BigEndian,
@@ -103,6 +103,7 @@ impl MPCParameters {
     ) -> Result<MPCParameters, SynthesisError>
         where C: Circuit<Bn256>
     {
+        println!("MPCParameters::new()");
         let mut assembly = KeypairAssembly {
             num_inputs: 0,
             num_aux: 0,
@@ -144,6 +145,8 @@ impl MPCParameters {
             }
         }
 
+        println!("MPCParameters::try to load phase1radix2m");
+
         // Try to load "radix_directory/phase1radix2m{}"
         let f = match File::open(format!("{}/phase1radix2m{}", radix_directory, exp)) {
             Ok(f) => f,
@@ -152,6 +155,9 @@ impl MPCParameters {
             }
         };
         let f = &mut BufReader::with_capacity(1024 * 1024, f);
+
+
+        println!("MPCParameters::read_g1");
 
         let read_g1 = |reader: &mut BufReader<File>| -> io::Result<G1Affine> {
             let mut repr = G1Uncompressed::empty();
@@ -165,6 +171,8 @@ impl MPCParameters {
                     Ok(e)
                 })
         };
+
+        println!("MPCParameters::read_g2");
 
         let read_g2 = |reader: &mut BufReader<File>| -> io::Result<G2Affine> {
             let mut repr = G2Uncompressed::empty();
@@ -211,6 +219,8 @@ impl MPCParameters {
         let alpha_coeffs_g1 = Arc::new(alpha_coeffs_g1);
         let beta_coeffs_g1 = Arc::new(beta_coeffs_g1);
 
+        println!("MPCParameters::h");
+
         let mut h = Vec::with_capacity(m-1);
         for _ in 0..m-1 {
             h.push(read_g1(f)?);
@@ -221,6 +231,12 @@ impl MPCParameters {
         let mut a_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
         let mut b_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
         let mut b_g2 = vec![G2::zero(); assembly.num_inputs + assembly.num_aux];
+
+        println!("MPCParameters::eval1");
+
+        println!("MPCParameters::worker (start)");
+        let worker = Worker::new();
+        println!("MPCParameters::worker (end)");
 
         fn eval(
             // Lagrange coefficients for tau
@@ -244,6 +260,7 @@ impl MPCParameters {
             worker: &Worker
         )
         {
+            println!("MPCParameters::sanitycheck");
             // Sanity check
             assert_eq!(a_g1.len(), at.len());
             assert_eq!(a_g1.len(), bt.len());
@@ -252,8 +269,10 @@ impl MPCParameters {
             assert_eq!(a_g1.len(), b_g2.len());
             assert_eq!(a_g1.len(), ext.len());
 
+            println!("MPCParameters::worker.scope (enter)");
             // Evaluate polynomials in multiple threads
             worker.scope(a_g1.len(), |scope, chunk| {
+                println!("MPCParameters::worker.scope (inside)");
                 for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in
                     a_g1.chunks_mut(chunk)
                         .zip(b_g1.chunks_mut(chunk))
@@ -269,6 +288,7 @@ impl MPCParameters {
                         let beta_coeffs_g1 = beta_coeffs_g1.clone();
 
                         scope.spawn(move |_| {
+                            println!("MPCParameters::scope.spawn");
                             for ((((((a_g1, b_g1), b_g2), ext), at), bt), ct) in
                                 a_g1.iter_mut()
                                     .zip(b_g1.iter_mut())
@@ -304,8 +324,8 @@ impl MPCParameters {
             });
         }
 
-        let worker = Worker::new();
 
+        println!("MPCParameters::eval2");
         // Evaluate for inputs.
         eval(
             coeffs_g1.clone(),
@@ -322,6 +342,7 @@ impl MPCParameters {
             &worker
         );
 
+        println!("MPCParameters::eval3");
         // Evaluate for auxillary variables.
         eval(
             coeffs_g1.clone(),
@@ -337,6 +358,8 @@ impl MPCParameters {
             &mut l,
             &worker
         );
+
+        println!("MPCParameters::for");
 
         // Don't allow any elements be unconstrained, so that
         // the L query is always fully dense.
@@ -417,9 +440,11 @@ impl MPCParameters {
         progress_update_interval: &u32
     ) -> [u8; 64]
     {
+        println!("MPCParameters::contribute()");
         // Generate a keypair
         let (pubkey, privkey) = keypair(rng, self);
 
+        println!("MPCParameters::batch_exp1()");
         #[cfg(not(feature = "wasm"))]
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
             let coeff = coeff.into_repr();
@@ -469,6 +494,7 @@ impl MPCParameters {
             }
         }
 
+        println!("MPCParameters::batch_exp2()");
         #[cfg(feature = "wasm")]
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
             let coeff = coeff.into_repr();
@@ -495,6 +521,7 @@ impl MPCParameters {
             }
         }
 
+        println!("MPCParameters::delta_inv");
         let delta_inv = privkey.delta.inverse().expect("nonzero");
         let mut l = (&self.params.l[..]).to_vec();
         let mut h = (&self.params.h[..]).to_vec();
