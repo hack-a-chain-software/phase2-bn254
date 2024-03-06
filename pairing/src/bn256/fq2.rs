@@ -180,6 +180,7 @@ impl Field for Fq2 {
     }
 
     fn inverse(&self) -> Option<Self> {
+        println!("fn inverse::");
         let mut t1 = self.c1;
         t1.square();
         let mut t0 = self.c0;
