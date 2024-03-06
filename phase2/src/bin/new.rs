@@ -21,12 +21,15 @@ fn main() {
 
     let should_filter_points_at_infinity = false;
 
-    // Import the circuit and create the initial parameters using phase 1
-    println!("Creating initial parameters for {}...", circuit_filename);
-    let params = {
-        let c = circuit_from_json_file(&circuit_filename);
-        MPCParameters::new(c, should_filter_points_at_infinity, radix_directory).unwrap()
-    };
+    println!("Creating initial radix_directory for {}...", radix_directory);
+    println!("Creating initial params_filename for {}...", params_filename);
+    println!("Creating initial circuit_filename for {}...", circuit_filename);
+
+    let c = circuit_from_json_file(&circuit_filename);
+
+    println!("circuit is here now");
+
+    let params = MPCParameters::new(c, should_filter_points_at_infinity, radix_directory).unwrap();
 
     println!("Writing initial parameters to {}.", params_filename);
     let mut f = File::create(params_filename).unwrap();
