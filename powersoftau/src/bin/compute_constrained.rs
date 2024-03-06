@@ -6,10 +6,10 @@ use powersoftau::{
 };
 
 use bellman_ce::pairing::bn256::Bn256;
-use memmap::*;
-use std::fs::OpenOptions;
-
-use std::io::{Read, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Read, Write};
+use memmap::MmapOptions;
+use memmap::MmapMut;
 
 const INPUT_IS_COMPRESSED: UseCompression = UseCompression::No;
 const COMPRESS_THE_OUTPUT: UseCompression = UseCompression::Yes;
@@ -54,15 +54,6 @@ fn main() {
                 h.input(&[r]);
             }
 
-            // Ask the user to provide some information for additional entropy
-            let mut user_input = String::new();
-            println!("Type some random text and press [ENTER] to provide additional entropy...");
-            std::io::stdin()
-                .read_line(&mut user_input)
-                .expect("expected to read some random text from the user");
-
-            // Hash it all up to make a seed
-            h.input(&user_input.as_bytes());
             h.result()
         };
 
@@ -109,27 +100,16 @@ fn main() {
     };
 
     // Create response file in this directory
-    let writer = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(response_filename)
-        .expect("unable to create response file");
+    let mut response_writer = BufWriter::new(
+        File::create(response_filename).expect("unable to create response file")
+    );
 
     let required_output_length = match COMPRESS_THE_OUTPUT {
         UseCompression::Yes => parameters.contribution_size,
         UseCompression::No => parameters.accumulator_size + parameters.public_key_size,
     };
 
-    writer
-        .set_len(required_output_length as u64)
-        .expect("must make output file large enough");
-
-    let mut writable_map = unsafe {
-        MmapOptions::new()
-            .map_mut(&writer)
-            .expect("unable to create a memory map for output")
-    };
+    let mut writable_map = vec![0; required_output_length];
 
     println!("Calculating previous contribution hash...");
 
@@ -189,49 +169,43 @@ fn main() {
     // Perform the transformation
     println!("Computing and writing your contribution, this could take a while...");
 
+    let mmap_mut_ptr: *mut MmapMut = &mut writable_map as *mut Vec<u8> as *mut MmapMut;
+
     // this computes a transformation and writes it
-    BatchedAccumulator::transform(
-        &readable_map,
-        &mut writable_map,
-        INPUT_IS_COMPRESSED,
-        COMPRESS_THE_OUTPUT,
-        CHECK_INPUT_CORRECTNESS,
-        &privkey,
-        &parameters,
-    )
-    .expect("must transform with the key");
+    unsafe {
+        BatchedAccumulator::transform(
+            &readable_map,
+            &mut *mmap_mut_ptr,
+            INPUT_IS_COMPRESSED,
+            COMPRESS_THE_OUTPUT,
+            CHECK_INPUT_CORRECTNESS,
+            &privkey,
+            &parameters,
+        )
+        .expect("must transform with the key");
+    }
 
     println!("Finishing writing your contribution to response file...");
 
     // Write the public key
-    pubkey
-        .write(&mut writable_map, COMPRESS_THE_OUTPUT, &parameters)
-        .expect("unable to write public key");
+    unsafe {
+        pubkey
+            .write(&mut *mmap_mut_ptr, COMPRESS_THE_OUTPUT, &parameters)
+            .expect("unable to write public key");
+    }
 
-    writable_map.flush().expect("must flush a memory map");
-
-    // Get the hash of the contribution, so the user can compare later
-    let output_readonly = writable_map
-        .make_read_only()
-        .expect("must make a map readonly");
-    let contribution_hash = calculate_hash(&output_readonly);
+    // Write the processed data to the response file
+    response_writer
+        .write_all(&writable_map)
+        .expect("unable to write to response file");
+    response_writer
+        .flush()
+        .expect("unable to flush response file");
 
     print!(
         "Done!\n\n\
-              Your contribution has been written to response file\n\n\
-              The BLAKE2b hash of response file is:\n"
+              Your contribution has been written to response file\n"
     );
-
-    for line in contribution_hash.as_slice().chunks(16) {
-        print!("\t");
-        for section in line.chunks(4) {
-            for b in section {
-                print!("{:02x}", b);
-            }
-            print!(" ");
-        }
-        println!();
-    }
 
     println!("Thank you for your participation, much appreciated! :)");
 }

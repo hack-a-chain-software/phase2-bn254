@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "circom": "0.0.35",
-    "snarkjs": "git+https://github.com/kobigurk/snarkjs.git"
+    "snarkjs": "git+https://github.com/kobigurk/snarkjs.git",
+    "circomlib": "^2.0.5"
   }
 }

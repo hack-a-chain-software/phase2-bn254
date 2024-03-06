@@ -1,13 +1,11 @@
 use powersoftau::batched_accumulator::BatchedAccumulator;
-use powersoftau::parameters::UseCompression;
-use powersoftau::utils::{blank_hash, calculate_hash};
+use powersoftau::parameters::{CeremonyParams, UseCompression};
+use powersoftau::utils::{blank_hash};
 
 use bellman_ce::pairing::bn256::Bn256;
-use memmap::*;
 use std::fs::OpenOptions;
 use std::io::Write;
-
-use powersoftau::parameters::CeremonyParams;
+use memmap::MmapMut;
 
 const COMPRESS_NEW_CHALLENGE: UseCompression = UseCompression::No;
 
@@ -32,7 +30,7 @@ fn main() {
         parameters.powers_g1_length
     );
 
-    let file = OpenOptions::new()
+    let mut file = OpenOptions::new()
         .read(true)
         .write(true)
         .create_new(true)
@@ -47,20 +45,11 @@ fn main() {
     file.set_len(expected_challenge_length as u64)
         .expect("unable to allocate large enough file");
 
-    let mut writable_map = unsafe {
-        MmapOptions::new()
-            .map_mut(&file)
-            .expect("unable to create a memory map")
-    };
+    let mut writable_vec = vec![0; expected_challenge_length];
 
     // Write a blank BLAKE2b hash:
     let hash = blank_hash();
-    (&mut writable_map[0..])
-        .write_all(hash.as_slice())
-        .expect("unable to write a default hash to mmap");
-    writable_map
-        .flush()
-        .expect("unable to write blank hash to challenge file");
+    writable_vec[0..hash.len()].copy_from_slice(hash.as_slice());
 
     println!("Blank hash for an empty challenge:");
     for line in hash.as_slice().chunks(16) {
@@ -74,30 +63,15 @@ fn main() {
         println!();
     }
 
-    BatchedAccumulator::generate_initial(&mut writable_map, COMPRESS_NEW_CHALLENGE, &parameters)
-        .expect("generation of initial accumulator is successful");
-    writable_map
-        .flush()
-        .expect("unable to flush memmap to disk");
+    let mmap_mut_ptr: *mut MmapMut = &mut writable_vec as *mut Vec<u8> as *mut MmapMut;
 
-    // Get the hash of the contribution, so the user can compare later
-    let output_readonly = writable_map
-        .make_read_only()
-        .expect("must make a map readonly");
-    let contribution_hash = calculate_hash(&output_readonly);
-
-    println!("Empty contribution is formed with a hash:");
-
-    for line in contribution_hash.as_slice().chunks(16) {
-        print!("\t");
-        for section in line.chunks(4) {
-            for b in section {
-                print!("{:02x}", b);
-            }
-            print!(" ");
-        }
-        println!();
+    unsafe {
+        BatchedAccumulator::generate_initial(&mut *mmap_mut_ptr, COMPRESS_NEW_CHALLENGE, &parameters)
+            .expect("generation of initial accumulator is successful");
     }
+
+    file.write_all(&writable_vec)
+        .expect("unable to write to challenge file");
 
     println!("Wrote a fresh accumulator to challenge file");
 }
