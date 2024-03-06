@@ -8,10 +8,13 @@ use phase2::circom_circuit::circuit_from_json_file;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    println!("pre args")
     if args.len() != 4 {
         println!("Usage: \n<in_circuit.json> <out_params.params> <path/to/phase1radix>");
         std::process::exit(exitcode::USAGE);
     }
+
+    println!("let circuit")
     let circuit_filename = &args[1];
     let params_filename = &args[2];
     let radix_directory = &args[3];
