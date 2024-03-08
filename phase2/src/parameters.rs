@@ -4,10 +4,10 @@ extern crate byteorder;
 extern crate num_cpus;
 extern crate crossbeam;
 
-// #[cfg(feature = "wasm")]
+#[cfg(feature = "wasm")]
 use bellman_ce::singlecore::Worker;
-// #[cfg(not(feature = "wasm"))]
-// use bellman_ce::multicore::Worker;
+#[cfg(not(feature = "wasm"))]
+use bellman_ce::multicore::Worker;
 
 use byteorder::{
     BigEndian,
@@ -235,7 +235,6 @@ impl MPCParameters {
         println!("MPCParameters::eval1");
 
         println!("MPCParameters::worker (start)");
-        let worker = Worker::new();
         println!("MPCParameters::worker (end)");
 
         fn eval(
@@ -322,8 +321,9 @@ impl MPCParameters {
                         });
                     }
             });
-        }
+        }        
 
+        let worker = Worker::new();
 
         println!("MPCParameters::eval2");
         // Evaluate for inputs.
