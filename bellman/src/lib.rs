@@ -26,22 +26,22 @@ mod multiexp;
 #[cfg(test)]
 mod tests;
 
-// cfg_if! {
-    // if #[cfg(feature = "multicore")] {
-    //     #[cfg(feature = "wasm")]
-    //     compile_error!("Multicore feature is not yet compatible with wasm target arch");
+cfg_if! {
+    if #[cfg(feature = "multicore")] {
+        #[cfg(feature = "wasm")]
+        compile_error!("Multicore feature is not yet compatible with wasm target arch");
 
-    //     pub mod multicore;
-    //     mod worker {
-    //         pub use crate::multicore::*;
-    //     }
-    // } else {
+        pub mod multicore;
+        mod worker {
+            pub use crate::multicore::*;
+        }
+    } else {
         pub mod singlecore;
         mod worker {
             pub use crate::singlecore::*;
         }
-    // }
-// }
+    }
+}
 
 mod cs;
 pub use self::cs::*;
