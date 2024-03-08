@@ -454,11 +454,7 @@ impl MPCParameters {
             println!("batch_exp::3");
             let cpus = num_cpus::get();
             println!("batch_exp::4 ->cpus {}", cpus);
-            let chunk_size = if bases.len() < cpus {
-                1
-            } else {
-                bases.len() / cpus
-            };
+            let chunk_size = 1
 
             println!("batch_exp::5");
             // Perform wNAF over multiple cores, placing results into `projective`.
