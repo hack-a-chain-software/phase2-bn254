@@ -448,20 +448,23 @@ impl MPCParameters {
         #[cfg(not(feature = "wasm"))]
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
             let coeff = coeff.into_repr();
-
             let mut projective = vec![C::Projective::zero(); bases.len()];
-            let cpus = num_cpus::get();
+            let cpus = 1;
             let chunk_size = if bases.len() < cpus {
                 1
             } else {
                 bases.len() / cpus
             };
 
+            println!("batch_exp::5");
             // Perform wNAF over multiple cores, placing results into `projective`.
             crossbeam::scope(|scope| {
+                println!("batch_exp::crossbeam::1");
                 for (bases, projective) in bases.chunks_mut(chunk_size)
                     .zip(projective.chunks_mut(chunk_size))
                     {
+                        println!("batch_exp::crossbeam::1.2");
+                        
                         scope.spawn(move |_| {
                             let mut wnaf = Wnaf::new();
                             let mut count = 0;
@@ -480,6 +483,7 @@ impl MPCParameters {
 
             // Perform batch normalization
             crossbeam::scope(|scope| {
+                println!("batch_exp::crossbeam::2");
                 for projective in projective.chunks_mut(chunk_size)
                     {
                         scope.spawn(move |_| {
@@ -487,23 +491,27 @@ impl MPCParameters {
                         });
                     }
             }).unwrap();
-
+            println!("batch_exp::crossbeam::3");
             // Turn it all back into affine points
             for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
                 *affine = projective.into_affine();
             }
+            println!("batch_exp::crossbeam::4");
         }
 
         println!("MPCParameters::batch_exp2()");
         #[cfg(feature = "wasm")]
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
+            println!("batch_exp::1");
             let coeff = coeff.into_repr();
-
+            println!("batch_exp::2");
             let mut projective = vec![C::Projective::zero(); bases.len()];
-
+            println!("batch_exp::3");
             // Perform wNAF, placing results into `projective`.
             let mut wnaf = Wnaf::new();
+            println!("batch_exp::4");
             let mut count = 0;
+            println!("batch_exp::5");
             for (base, projective) in bases.iter_mut().zip(projective.iter_mut()) {
                 *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
                 count = count + 1;
@@ -511,31 +519,40 @@ impl MPCParameters {
                     println!("progress {} {}", *progress_update_interval, *total_exps)
                 }
             }
-
+            println!("batch_exp::6");
             // Perform batch normalization
             C::Projective::batch_normalization(&mut projective);
-
+            println!("batch_exp::7");
             // Turn it all back into affine points
             for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
                 *affine = projective.into_affine();
             }
+            println!("batch_exp::8");
         }
 
         println!("MPCParameters::delta_inv");
         let delta_inv = privkey.delta.inverse().expect("nonzero");
+        println!("1");
         let mut l = (&self.params.l[..]).to_vec();
+        println!("2");
         let mut h = (&self.params.h[..]).to_vec();
+        println!("3");
         let total_exps = (l.len() + h.len()) as u32;
+        println!("4");
         batch_exp(&mut l, delta_inv, &progress_update_interval, &total_exps);
+        println!("5");
         batch_exp(&mut h, delta_inv, &progress_update_interval, &total_exps);
+        println!("6");
         self.params.l = Arc::new(l);
+        println!("7");
         self.params.h = Arc::new(h);
-
+        println!("8");
         self.params.vk.delta_g1 = self.params.vk.delta_g1.mul(privkey.delta).into_affine();
+        println!("9");
         self.params.vk.delta_g2 = self.params.vk.delta_g2.mul(privkey.delta).into_affine();
-
+        println!("10");
         self.contributions.push(pubkey.clone());
-
+        println!("11");
         // Calculate the hash of the public key and return it
         {
             let sink = io::sink();
