@@ -444,59 +444,59 @@ impl MPCParameters {
         // Generate a keypair
         let (pubkey, privkey) = keypair(rng, self);
 
-        // println!("MPCParameters::batch_exp1()");
-        // #[cfg(not(feature = "wasm"))]
-        // fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
-        //     let coeff = coeff.into_repr();
-        //     let mut projective = vec![C::Projective::zero(); bases.len()];
-        //     let cpus = num_cpus::get();
-        //     let chunk_size = 1;
+        println!("MPCParameters::batch_exp1()");
+        #[cfg(not(feature = "wasm"))]
+        fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
+            let coeff = coeff.into_repr();
+            let mut projective = vec![C::Projective::zero(); bases.len()];
+            let cpus = num_cpus::get();
+            let chunk_size = 1;
 
-        //     println!("batch_exp::5");
-        //     // Perform wNAF over multiple cores, placing results into `projective`.
-        //     crossbeam::scope(|scope| {
-        //         println!("batch_exp::crossbeam::1");
-        //         for (bases, projective) in bases.chunks_mut(chunk_size)
-        //             .zip(projective.chunks_mut(chunk_size))
-        //             {
-        //                 println!("batch_exp::crossbeam::2");
+            println!("batch_exp::5");
+            // Perform wNAF over multiple cores, placing results into `projective`.
+            crossbeam::scope(|scope| {
+                println!("batch_exp::crossbeam::1");
+                for (bases, projective) in bases.chunks_mut(chunk_size)
+                    .zip(projective.chunks_mut(chunk_size))
+                    {
+                        println!("batch_exp::crossbeam::2");
                         
-        //                 scope.spawn(move |_| {
-        //                     let mut wnaf = Wnaf::new();
-        //                     let mut count = 0;
-        //                     for (base, projective) in bases.iter_mut()
-        //                         .zip(projective.iter_mut())
-        //                         {
-        //                             *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
-        //                             count = count + 1;
-        //                             if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
-        //                                 println!("progress {} {}", *progress_update_interval, *total_exps)
-        //                             }
-        //                         }
-        //                 });
-        //             }
-        //     }).unwrap();
+                        scope.spawn(move |_| {
+                            let mut wnaf = Wnaf::new();
+                            let mut count = 0;
+                            for (base, projective) in bases.iter_mut()
+                                .zip(projective.iter_mut())
+                                {
+                                    *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
+                                    count = count + 1;
+                                    if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
+                                        println!("progress {} {}", *progress_update_interval, *total_exps)
+                                    }
+                                }
+                        });
+                    }
+            }).unwrap();
 
-        //     // Perform batch normalization
-        //     crossbeam::scope(|scope| {
-        //         println!("batch_exp::crossbeam::2");
-        //         for projective in projective.chunks_mut(chunk_size)
-        //             {
-        //                 scope.spawn(move |_| {
-        //                     C::Projective::batch_normalization(projective);
-        //                 });
-        //             }
-        //     }).unwrap();
-
-        //     // Turn it all back into affine points
-        //     for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
-        //         *affine = projective.into_affine();
-        //     }
-        //     println!("batch_exp::crossbeam::3");
-        // }
+            // Perform batch normalization
+            crossbeam::scope(|scope| {
+                println!("batch_exp::crossbeam::2");
+                for projective in projective.chunks_mut(chunk_size)
+                    {
+                        scope.spawn(move |_| {
+                            C::Projective::batch_normalization(projective);
+                        });
+                    }
+            }).unwrap();
+            println!("batch_exp::crossbeam::3");
+            // Turn it all back into affine points
+            for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
+                *affine = projective.into_affine();
+            }
+            println!("batch_exp::crossbeam::4");
+        }
 
         println!("MPCParameters::batch_exp2()");
-        // #[cfg(feature = "wasm")]
+        #[cfg(feature = "wasm")]
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
             println!("batch_exp::1");
             let coeff = coeff.into_repr();
