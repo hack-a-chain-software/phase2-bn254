@@ -447,14 +447,10 @@ impl MPCParameters {
         println!("MPCParameters::batch_exp1()");
         #[cfg(not(feature = "wasm"))]
         fn batch_exp<C: CurveAffine>(bases: &mut [C], coeff: C::Scalar, progress_update_interval: &u32, total_exps: &u32) {
-            println!("batch_exp::1");
             let coeff = coeff.into_repr();
-            println!("batch_exp::2");
             let mut projective = vec![C::Projective::zero(); bases.len()];
-            println!("batch_exp::3");
             let cpus = num_cpus::get();
-            println!("batch_exp::4 ->cpus {}", cpus);
-            let chunk_size = 1
+            let chunk_size = 1;
 
             println!("batch_exp::5");
             // Perform wNAF over multiple cores, placing results into `projective`.
@@ -463,6 +459,8 @@ impl MPCParameters {
                 for (bases, projective) in bases.chunks_mut(chunk_size)
                     .zip(projective.chunks_mut(chunk_size))
                     {
+                        println!("batch_exp::crossbeam::2");
+                        
                         scope.spawn(move |_| {
                             let mut wnaf = Wnaf::new();
                             let mut count = 0;
