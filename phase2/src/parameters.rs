@@ -441,7 +441,6 @@ impl MPCParameters {
     ) -> [u8; 64]
     {
         println!("MPCParameters::contribute()");
-        // Generate a keypair
         let (pubkey, privkey) = keypair(rng, self);
 
         println!("MPCParameters::batch_exp1()");
@@ -450,45 +449,56 @@ impl MPCParameters {
             let coeff = coeff.into_repr();
 
             let mut projective = vec![C::Projective::zero(); bases.len()];
-            let cpus = num_cpus::get();
-            let chunk_size = if bases.len() < cpus {
-                1
-            } else {
-                bases.len() / cpus
-            };
+            // let cpus = num_cpus::get();
+            // let chunk_size = if bases.len() < cpus {
+            //     1
+            // } else {
+            //     bases.len() / cpus
+            // };
 
-            // Perform wNAF over multiple cores, placing results into `projective`.
-            crossbeam::scope(|scope| {
-                for (bases, projective) in bases.chunks_mut(chunk_size)
-                    .zip(projective.chunks_mut(chunk_size))
-                    {
-                        scope.spawn(move |_| {
-                            let mut wnaf = Wnaf::new();
-                            let mut count = 0;
-                            for (base, projective) in bases.iter_mut()
-                                .zip(projective.iter_mut())
-                                {
-                                    *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
-                                    count = count + 1;
-                                    if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
-                                        println!("progress {} {}", *progress_update_interval, *total_exps)
-                                    }
-                                }
-                        });
-                    }
-            }).unwrap();
+            // // Perform wNAF over multiple cores, placing results into `projective`.
+            // crossbeam::scope(|scope| {
+            //     for (bases, projective) in bases.chunks_mut(chunk_size)
+            //         .zip(projective.chunks_mut(chunk_size))
+            //         {
+            //             scope.spawn(move |_| {
+            //                 let mut wnaf = Wnaf::new();
+            //                 let mut count = 0;
+            //                 for (base, projective) in bases.iter_mut()
+            //                     .zip(projective.iter_mut())
+            //                     {
+            //                         *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
+            //                         count = count + 1;
+            //                         if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
+            //                             println!("progress {} {}", *progress_update_interval, *total_exps)
+            //                         }
+            //                     }
+            //             });
+            //         }
+            // }).unwrap();
 
-            // Perform batch normalization
-            crossbeam::scope(|scope| {
-                for projective in projective.chunks_mut(chunk_size)
-                    {
-                        scope.spawn(move |_| {
-                            C::Projective::batch_normalization(projective);
-                        });
-                    }
-            }).unwrap();
-
-            // Turn it all back into affine points
+            // // Perform batch normalization
+            // crossbeam::scope(|scope| {
+            //     for projective in projective.chunks_mut(chunk_size)
+            //         {
+            //             scope.spawn(move |_| {
+            //                 C::Projective::batch_normalization(projective);
+            //             });
+            //         }
+            // }).unwrap();
+        
+            let mut wnaf = Wnaf::new();
+            let mut count = 0;
+            for (base, projective) in bases.iter_mut().zip(projective.iter_mut()) {
+                *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
+                count += 1;
+                if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
+                    println!("progress {} {}", *progress_update_interval, *total_exps)
+                }
+            }
+        
+            C::Projective::batch_normalization(&mut projective);
+        
             for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
                 *affine = projective.into_affine();
             }
@@ -755,128 +765,165 @@ pub fn verify_contribution(
     after: &MPCParameters
 ) -> Result<[u8; 64], ()>
 {
+    println!("verify_contribution::1");
     // Transformation involves a single new object
     if after.contributions.len() != (before.contributions.len() + 1) {
+        println!("verify_contribution::1.1");
         return Err(());
     }
-
+    println!("verify_contribution::2");
     // None of the previous transformations should change
     if &before.contributions[..] != &after.contributions[0..before.contributions.len()] {
+        println!("verify_contribution::2.1");
         return Err(());
     }
-
+    println!("verify_contribution::3");
     // H/L will change, but should have same length
     if before.params.h.len() != after.params.h.len() {
+        println!("verify_contribution::3.1");
         return Err(());
     }
+    println!("verify_contribution::4");
     if before.params.l.len() != after.params.l.len() {
+        println!("verify_contribution::4.1");
         return Err(());
     }
-
+    println!("verify_contribution::5");
     // A/B_G1/B_G2 doesn't change at all
     if before.params.a != after.params.a {
+        println!("verify_contribution::5.1");
         return Err(());
     }
+    println!("verify_contribution:6");
     if before.params.b_g1 != after.params.b_g1 {
+        println!("verify_contribution::6.1");
         return Err(());
     }
+    println!("verify_contribution::7");
     if before.params.b_g2 != after.params.b_g2 {
+        println!("verify_contribution::7.1");
         return Err(());
     }
-
+    println!("verify_contribution::8");
     // alpha/beta/gamma don't change
     if before.params.vk.alpha_g1 != after.params.vk.alpha_g1 {
+        println!("verify_contribution::8.1");
         return Err(());
     }
+    println!("verify_contribution::9");
     if before.params.vk.beta_g1 != after.params.vk.beta_g1 {
+        println!("verify_contribution::9.1");
         return Err(());
     }
+    println!("verify_contribution::10");
     if before.params.vk.beta_g2 != after.params.vk.beta_g2 {
+        println!("verify_contribution::10.1");
         return Err(());
     }
+    println!("verify_contribution::11");
     if before.params.vk.gamma_g2 != after.params.vk.gamma_g2 {
+        println!("verify_contribution::11.1");
         return Err(());
     }
-
+    println!("verify_contribution::12");
     // IC shouldn't change, as gamma doesn't change
     if before.params.vk.ic != after.params.vk.ic {
+        println!("verify_contribution::12.1");
         return Err(());
     }
-
+    println!("verify_contribution::13");
     // cs_hash should be the same
     if &before.cs_hash[..] != &after.cs_hash[..] {
+        println!("verify_contribution::13.1");
         return Err(());
     }
-
+    println!("verify_contribution::14");
     let sink = io::sink();
+    println!("verify_contribution::15");
     let mut sink = HashWriter::new(sink);
+    println!("verify_contribution::16");
     sink.write_all(&before.cs_hash[..]).unwrap();
 
     for pubkey in &before.contributions {
+        println!("verify_contribution::17");
         pubkey.write(&mut sink).unwrap();
     }
-
+    println!("verify_contribution::18");
     let pubkey = after.contributions.last().unwrap();
+    println!("verify_contribution::19");
     sink.write_all(pubkey.s.into_uncompressed().as_ref()).unwrap();
+    println!("verify_contribution::20");
     sink.write_all(pubkey.s_delta.into_uncompressed().as_ref()).unwrap();
-
+    println!("verify_contribution::21");
     let h = sink.into_hash();
-
+    println!("verify_contribution::22");
     // The transcript must be consistent
     if &pubkey.transcript[..] != h.as_ref() {
+        println!("verify_contribution::22.1");
         return Err(());
     }
-
+    println!("verify_contribution::23");
     let r = hash_to_g2(h.as_ref()).into_affine();
-
+    println!("verify_contribution::24");
     // Check the signature of knowledge
     if !same_ratio((r, pubkey.r_delta), (pubkey.s, pubkey.s_delta)) {
+        println!("verify_contribution::24.1");
         return Err(());
     }
-
+    println!("verify_contribution::25");
     // Check the change from the old delta is consistent
     if !same_ratio(
         (before.params.vk.delta_g1, pubkey.delta_after),
         (r, pubkey.r_delta)
     ) {
+        println!("verify_contribution::25.1");
         return Err(());
     }
-
+    println!("verify_contribution::26");
     // Current parameters should have consistent delta in G1
     if pubkey.delta_after != after.params.vk.delta_g1 {
+        println!("verify_contribution::26.1");
         return Err(());
     }
-
+    println!("verify_contribution::27");
     // Current parameters should have consistent delta in G2
     if !same_ratio(
         (G1Affine::one(), pubkey.delta_after),
         (G2Affine::one(), after.params.vk.delta_g2)
     ) {
+        println!("verify_contribution::27.1");
         return Err(());
     }
-
+    println!("verify_contribution::28");
     // H and L queries should be updated with delta^-1
     if !same_ratio(
         merge_pairs(&before.params.h, &after.params.h),
         (after.params.vk.delta_g2, before.params.vk.delta_g2) // reversed for inverse
     ) {
+        println!("verify_contribution::28.1");
         return Err(());
     }
-
+    println!("verify_contribution::29");
     if !same_ratio(
         merge_pairs(&before.params.l, &after.params.l),
         (after.params.vk.delta_g2, before.params.vk.delta_g2) // reversed for inverse
     ) {
+        println!("verify_contribution::29.1");
         return Err(());
     }
-
+    println!("verify_contribution::30");
     let sink = io::sink();
+    println!("verify_contribution::31");
     let mut sink = HashWriter::new(sink);
+    println!("verify_contribution::32");
     pubkey.write(&mut sink).unwrap();
+    println!("verify_contribution::33");
     let h = sink.into_hash();
+    println!("verify_contribution::34");
     let mut response = [0u8; 64];
+    println!("verify_contribution::35");
     response.copy_from_slice(h.as_ref());
-
+    println!("verify_contribution::36");
     Ok(response)
 }
 
