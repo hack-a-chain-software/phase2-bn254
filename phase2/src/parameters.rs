@@ -441,7 +441,6 @@ impl MPCParameters {
     ) -> [u8; 64]
     {
         println!("MPCParameters::contribute()");
-        // Generate a keypair
         let (pubkey, privkey) = keypair(rng, self);
 
         println!("MPCParameters::batch_exp1()");
@@ -450,45 +449,56 @@ impl MPCParameters {
             let coeff = coeff.into_repr();
 
             let mut projective = vec![C::Projective::zero(); bases.len()];
-            let cpus = num_cpus::get();
-            let chunk_size = if bases.len() < cpus {
-                1
-            } else {
-                bases.len() / cpus
-            };
+            // let cpus = num_cpus::get();
+            // let chunk_size = if bases.len() < cpus {
+            //     1
+            // } else {
+            //     bases.len() / cpus
+            // };
 
-            // Perform wNAF over multiple cores, placing results into `projective`.
-            crossbeam::scope(|scope| {
-                for (bases, projective) in bases.chunks_mut(chunk_size)
-                    .zip(projective.chunks_mut(chunk_size))
-                    {
-                        scope.spawn(move |_| {
-                            let mut wnaf = Wnaf::new();
-                            let mut count = 0;
-                            for (base, projective) in bases.iter_mut()
-                                .zip(projective.iter_mut())
-                                {
-                                    *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
-                                    count = count + 1;
-                                    if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
-                                        println!("progress {} {}", *progress_update_interval, *total_exps)
-                                    }
-                                }
-                        });
-                    }
-            }).unwrap();
+            // // Perform wNAF over multiple cores, placing results into `projective`.
+            // crossbeam::scope(|scope| {
+            //     for (bases, projective) in bases.chunks_mut(chunk_size)
+            //         .zip(projective.chunks_mut(chunk_size))
+            //         {
+            //             scope.spawn(move |_| {
+            //                 let mut wnaf = Wnaf::new();
+            //                 let mut count = 0;
+            //                 for (base, projective) in bases.iter_mut()
+            //                     .zip(projective.iter_mut())
+            //                     {
+            //                         *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
+            //                         count = count + 1;
+            //                         if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
+            //                             println!("progress {} {}", *progress_update_interval, *total_exps)
+            //                         }
+            //                     }
+            //             });
+            //         }
+            // }).unwrap();
 
-            // Perform batch normalization
-            crossbeam::scope(|scope| {
-                for projective in projective.chunks_mut(chunk_size)
-                    {
-                        scope.spawn(move |_| {
-                            C::Projective::batch_normalization(projective);
-                        });
-                    }
-            }).unwrap();
-
-            // Turn it all back into affine points
+            // // Perform batch normalization
+            // crossbeam::scope(|scope| {
+            //     for projective in projective.chunks_mut(chunk_size)
+            //         {
+            //             scope.spawn(move |_| {
+            //                 C::Projective::batch_normalization(projective);
+            //             });
+            //         }
+            // }).unwrap();
+        
+            let mut wnaf = Wnaf::new();
+            let mut count = 0;
+            for (base, projective) in bases.iter_mut().zip(projective.iter_mut()) {
+                *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
+                count += 1;
+                if *progress_update_interval > 0 && count % *progress_update_interval == 0 {
+                    println!("progress {} {}", *progress_update_interval, *total_exps)
+                }
+            }
+        
+            C::Projective::batch_normalization(&mut projective);
+        
             for (projective, affine) in projective.iter().zip(bases.iter_mut()) {
                 *affine = projective.into_affine();
             }
@@ -852,9 +862,11 @@ pub fn verify_contribution(
         (G1Affine::one(), pubkey.delta_after),
         (G2Affine::one(), after.params.vk.delta_g2)
     ) {
+        println!("verify_contribution::27.1");
         return Err(());
     }
 
+    println!("function merge_pairs needs update");
     // H and L queries should be updated with delta^-1
     if !same_ratio(
         merge_pairs(&before.params.h, &after.params.h),
