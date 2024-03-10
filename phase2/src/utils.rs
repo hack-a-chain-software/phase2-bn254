@@ -58,48 +58,76 @@ pub fn same_ratio<G1: CurveAffine>(
 /// ... with high probability.
 pub fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G)
 {
-    use std::sync::Mutex;
+    // use std::sync::Mutex;
+    // use rand::{thread_rng};
+
+    // assert_eq!(v1.len(), v2.len());
+
+    // let chunk = (v1.len() / num_cpus::get()) + 1;
+
+    // let s = Arc::new(Mutex::new(G::Projective::zero()));
+    // let sx = Arc::new(Mutex::new(G::Projective::zero()));
+
+    // crossbeam::scope(|scope| {
+    //     for (v1, v2) in v1.chunks(chunk).zip(v2.chunks(chunk)) {
+    //         let s = s.clone();
+    //         let sx = sx.clone();
+
+    //         scope.spawn(move |_| {
+    //             // We do not need to be overly cautious of the RNG
+    //             // used for this check.
+    //             let rng = &mut thread_rng();
+
+    //             let mut wnaf = Wnaf::new();
+    //             let mut local_s = G::Projective::zero();
+    //             let mut local_sx = G::Projective::zero();
+
+    //             for (v1, v2) in v1.iter().zip(v2.iter()) {
+    //                 let rho = G::Scalar::rand(rng);
+    //                 let mut wnaf = wnaf.scalar(rho.into_repr());
+    //                 let v1 = wnaf.base(v1.into_projective());
+    //                 let v2 = wnaf.base(v2.into_projective());
+
+    //                 local_s.add_assign(&v1);
+    //                 local_sx.add_assign(&v2);
+    //             }
+
+    //             s.lock().unwrap().add_assign(&local_s);
+    //             sx.lock().unwrap().add_assign(&local_sx);
+    //         });
+    //     }
+    // }).unwrap();
+
+    // let s = s.lock().unwrap().into_affine();
+    // let sx = sx.lock().unwrap().into_affine();
+
+    // (s, sx)
+
     use rand::{thread_rng};
 
     assert_eq!(v1.len(), v2.len());
 
-    let chunk = (v1.len() / num_cpus::get()) + 1;
+    let mut local_s = G::Projective::zero();
+    let mut local_sx = G::Projective::zero();
 
-    let s = Arc::new(Mutex::new(G::Projective::zero()));
-    let sx = Arc::new(Mutex::new(G::Projective::zero()));
+    // We do not need to be overly cautious of the RNG
+    // used for this check.
+    let rng = &mut thread_rng();
 
-    crossbeam::scope(|scope| {
-        for (v1, v2) in v1.chunks(chunk).zip(v2.chunks(chunk)) {
-            let s = s.clone();
-            let sx = sx.clone();
+    let mut wnaf = Wnaf::new();
 
-            scope.spawn(move |_| {
-                // We do not need to be overly cautious of the RNG
-                // used for this check.
-                let rng = &mut thread_rng();
+    for (v1, v2) in v1.iter().zip(v2.iter()) {
+        let rho = G::Scalar::rand(rng);
+        let mut wnaf = wnaf.scalar(rho.into_repr());
+        let v1 = wnaf.base(v1.into_projective());
+        let v2 = wnaf.base(v2.into_projective());
 
-                let mut wnaf = Wnaf::new();
-                let mut local_s = G::Projective::zero();
-                let mut local_sx = G::Projective::zero();
+        local_s.add_assign(&v1);
+        local_sx.add_assign(&v2);
+    }
 
-                for (v1, v2) in v1.iter().zip(v2.iter()) {
-                    let rho = G::Scalar::rand(rng);
-                    let mut wnaf = wnaf.scalar(rho.into_repr());
-                    let v1 = wnaf.base(v1.into_projective());
-                    let v2 = wnaf.base(v2.into_projective());
-
-                    local_s.add_assign(&v1);
-                    local_sx.add_assign(&v2);
-                }
-
-                s.lock().unwrap().add_assign(&local_s);
-                sx.lock().unwrap().add_assign(&local_sx);
-            });
-        }
-    }).unwrap();
-
-    let s = s.lock().unwrap().into_affine();
-    let sx = sx.lock().unwrap().into_affine();
+    let s = local_s.into_affine();
+    let sx = local_sx.into_affine();
 
     (s, sx)
 }
